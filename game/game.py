@@ -8,6 +8,7 @@ from game.circle_manager import CircleManager
 from game.config import *
 
 MENU = "menu"
+COUNTDOWN = "countdown"
 PLAYING = "playing"
 
 YOUTUBE_URL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
@@ -18,6 +19,7 @@ BUTTON_X2, BUTTON_Y2 = 790, 410
 class Game:
 
     def __init__(self):
+        self.countdown_start = 0
         self.cap = None
         self.running = False
         self.state = MENU
@@ -45,17 +47,23 @@ class Game:
         if key == ord('q'):
             self.running = False
 
-   def ambos_dedos_en_boton(self, hand_positions):
-    if len(hand_positions) < 1:
+    def ambos_dedos_en_boton(self, hand_positions):
+        if len(hand_positions) < 1:
+            return False
+        for (x, y) in hand_positions:
+            if BUTTON_X1 < x < BUTTON_X2 and BUTTON_Y1 < y < BUTTON_Y2:
+                return True
         return False
-    for (x, y) in hand_positions:
-        if BUTTON_X1 < x < BUTTON_X2 and BUTTON_Y1 < y < BUTTON_Y2:
-            return True
-    return False
 
     def update(self, delta_time, hand_positions):
         if self.state == MENU:
             if self.ambos_dedos_en_boton(hand_positions):
+                self.state = COUNTDOWN
+                self.countdown_start = time.time()
+
+        elif self.state == COUNTDOWN:
+            elapsed = time.time() - self.countdown_start
+            if elapsed >= 3:
                 self.state = PLAYING
                 webbrowser.open(YOUTUBE_URL)
 
@@ -67,16 +75,24 @@ class Game:
 
     def render(self, frame):
         if self.state == MENU:
-            # Fondo semitransparente en el botón
             overlay = frame.copy()
             cv2.rectangle(overlay, (BUTTON_X1, BUTTON_Y1), (BUTTON_X2, BUTTON_Y2), (0, 200, 0), -1)
             cv2.addWeighted(overlay, 0.4, frame, 0.6, 0, frame)
-            # Borde del botón
             cv2.rectangle(frame, (BUTTON_X1, BUTTON_Y1), (BUTTON_X2, BUTTON_Y2), (0, 255, 0), 3)
-            # Texto del botón
             cv2.putText(frame, "INICIAR", (545, 375), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 255, 255), 3)
-            # Instrucción
-            cv2.putText(frame, "Pon ambos dedos indice sobre el boton", (200, 460), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (200, 200, 200), 2)
+            cv2.putText(frame, "Pon tu dedo indice sobre el boton", (230, 460), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (200, 200, 200), 2)
+
+        elif self.state == COUNTDOWN:
+            elapsed = time.time() - self.countdown_start
+            numero = str(3 - int(elapsed))
+            h, w, _ = frame.shape
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            scale = 6
+            thickness = 10
+            (tw, th), _ = cv2.getTextSize(numero, font, scale, thickness)
+            x = (w - tw) // 2
+            y = (h + th) // 2
+            cv2.putText(frame, numero, (x, y), font, scale, (0, 255, 0), thickness)
 
         elif self.state == PLAYING:
             self.circle_manager.draw(frame)
