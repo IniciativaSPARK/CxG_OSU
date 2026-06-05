@@ -1,5 +1,6 @@
 import cv2
 import math
+import uuid
 
 #####
 ## "Entidad" circulo que se dibuja en la pantalla
@@ -7,6 +8,7 @@ import math
 class Circle:
 
     def __init__(self, x, y, radius, color):
+        self.id = str(uuid.uuid4())
         self.x = x
         self.y = y
         self.radius = radius

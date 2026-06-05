@@ -54,12 +54,13 @@ class Game:
 
 
     # Actualiza los componentes del juego
-    def update(self, delta_time, hand_positions):
+    def update(self, delta_time, hand_positions, is_fist: bool):
 
         self.score = self.circle_manager.update(
             delta_time,
             hand_positions,
-            self.score
+            self.score,
+            is_fist
         )
 
         self.spawn_system.update(
@@ -95,10 +96,16 @@ class Game:
     def run(self):
 
         self.setup()
+        
+        # Variables para gesto de puño
+        fist_start_time = None
+        fist_hold_duration = 0.5  # 0.5 segundos (hold requerido)
+        fist_scored = False  # evita sumar puntos repetidos por el mismo hold
+
 
         while self.running:
 
-            ### CALCULAR DETLA TIME ###
+            ### CALCULAR DELTA TIME ###
             current_time = time.time()
 
             self.delta_time = (current_time - self.last_frame_time)
@@ -117,14 +124,51 @@ class Game:
             ### LEER /PROCESAR INPUT ###
             frame = cv2.flip(frame, 1)
 
-            frame, hand_positions = (
+            # Ahora process_frame devuelve 3 valores
+            frame, hand_positions, hand_landmarks_list = (
                 self.hand_tracker.process_frame(frame)
             )
+
+            # DETECTAR GESTO DE PUÑO SOSTENIDO
+            if hand_landmarks_list:
+                for hand_landmarks in hand_landmarks_list:
+                    is_fist = self.hand_tracker.is_fist_gesture(hand_landmarks)
+                    if is_fist:
+                        if fist_start_time is None:
+                            fist_start_time = time.time()
+                        elif time.time() - fist_start_time >= fist_hold_duration:
+                            # Eliminar SOLO el/los círculo(s) donde el centro azul está sobre el círculo.
+                            # `hand_positions` contiene los centros (en el mismo orden) de las manos detectadas.
+                            if not fist_scored:
+                                # Eliminar SOLO círculos donde el centro azul está sobre el círculo
+                                # y sumar +1 punto extra por cada eliminación con puño (hold).
+                                before_count = len(self.circle_manager.circles)
+                                for center in hand_positions:
+                                    prev_active = [c.active for c in self.circle_manager.circles]
+                                    # Llamada: la eliminación la hace CircleManager
+                                    self.circle_manager.check_fist_on_circle(center, is_fist=True)
+                                    after_active = [c.active for c in self.circle_manager.circles]
+                                    # sumar puntos por cada círculo que pasó de active=True a active=False
+                                    for i in range(min(len(prev_active), len(after_active))):
+                                        if prev_active[i] and not after_active[i]:
+                                            self.score += 1
+                                fist_scored = True
+
+                            fist_start_time = None
+                            print("¡Puño detectado! Eliminación selectiva con centro azul.")
+                    else:
+                        fist_start_time = None
+                        fist_scored = False
+
+            else:
+                fist_start_time = None
+
 
             self.process_input()
 
             ### ACTUALIZAR EL ESTADO DEL JUEGO ###
-            self.update(self.delta_time, hand_positions)
+            # `is_fist` controla el temporizador de eliminación por mantener la mano sobre el círculo
+            self.update(self.delta_time, hand_positions, is_fist=(fist_start_time is not None))
 
             ### RENDERIZAR LA INFO EN LA PANTALLA ###
             self.render(frame)
